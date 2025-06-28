@@ -2,7 +2,7 @@
 # run with bash - python test_scraper.py
 
 import unittest
-from recipe_collector import extract_recipe # type: ignore
+from recipe_collector import extract_recipe
 
 class TestRecipeScraping(unittest.TestCase):
 

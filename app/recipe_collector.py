@@ -6,7 +6,7 @@ import json
 import requests
 from bs4 import BeautifulSoup
 from urllib.parse import quote
-from recipe_manager import save_recipe_to_file # type: ignore
+from recipe_manager import save_recipe_to_file
 
 DATA_DIR = os.path.join("data", "recipes")
 IMAGE_DIR = os.path.join("data", "images")

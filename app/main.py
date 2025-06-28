@@ -1,6 +1,7 @@
 # main.py
 # run with bash - python main.py
 
+
 import sys
 import json
 from PyQt5.QtWidgets import (
@@ -9,8 +10,8 @@ from PyQt5.QtWidgets import (
     QFormLayout, QMessageBox, QSpinBox, QPlainTextEdit
 )
 from PyQt5.QtGui import QPixmap
-from recipe_collector import collect_recipes # type: ignore
-from recipe_manager import load_recipes, save_recipe_to_file, export_all_to_csv # type: ignore
+from recipe_collector import collect_recipes 
+from recipe_manager import load_recipes, save_recipe_to_file, export_all_to_csv 
 
 
 class RecipeApp(QWidget):
