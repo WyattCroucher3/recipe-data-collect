@@ -1,0 +1,30 @@
+# recipe_manager.py
+
+import os
+import json
+from glob import glob
+
+DATA_DIR = os.path.join("data", "recipes")
+
+def load_recipes():
+    recipes = []
+    for filepath in glob(os.path.join(DATA_DIR, "*.json")):
+        try:
+            with open(filepath, 'r', encoding='utf-8') as f:
+                recipe = json.load(f)
+                recipes.append(recipe)
+        except:
+            continue
+    return recipes
+
+def save_recipe_to_file(recipe):
+    if not os.path.exists(DATA_DIR):
+        os.makedirs(DATA_DIR)
+    title = recipe.get('title', 'untitled')
+    filename = os.path.join(DATA_DIR, f"{sanitize_filename(title)}.json")
+    with open(filename, 'w', encoding='utf-8') as f:
+        json.dump(recipe, f, ensure_ascii=False, indent=2)
+
+def sanitize_filename(name):
+    import re
+    return re.sub(r'[^a-zA-Z0-9_\-]', '_', name)

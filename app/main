@@ -1,0 +1,135 @@
+# main.py
+
+import sys
+from PyQt5.QtWidgets import (
+    QApplication, QWidget, QTabWidget, QVBoxLayout,
+    QHBoxLayout, QPushButton, QLabel, QListWidget, QTextEdit, QLineEdit,
+    QFileDialog, QFormLayout, QMessageBox, QSpinBox, QCheckBox
+)
+from PyQt5.QtGui import QPixmap
+from recipe_collector import collect_recipes
+from recipe_manager import load_recipes, save_recipe
+
+class RecipeApp(QWidget):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("Recipe Collector & Viewer")
+        self.setMinimumSize(800, 600)
+
+        layout = QVBoxLayout()
+        self.tabs = QTabWidget()
+
+        self.view_tab = QWidget()
+        self.collect_tab = QWidget()
+
+        self.init_view_tab()
+        self.init_collect_tab()
+
+        self.tabs.addTab(self.view_tab, "📖 View Recipes")
+        self.tabs.addTab(self.collect_tab, "📡 Collect Recipes")
+
+        layout.addWidget(self.tabs)
+        self.setLayout(layout)
+
+    # ---------- VIEW TAB ----------
+    def init_view_tab(self):
+        layout = QHBoxLayout()
+
+        self.recipe_list = QListWidget()
+        self.recipe_list.itemClicked.connect(self.load_selected_recipe)
+
+        self.recipe_view = QTextEdit()
+        self.recipe_view.setReadOnly(True)
+
+        self.image_label = QLabel("Image Preview")
+        self.image_label.setFixedWidth(300)
+        self.image_label.setScaledContents(True)
+
+        left_layout = QVBoxLayout()
+        left_layout.addWidget(QLabel("Saved Recipes"))
+        left_layout.addWidget(self.recipe_list)
+
+        right_layout = QVBoxLayout()
+        right_layout.addWidget(self.recipe_view)
+        right_layout.addWidget(self.image_label)
+
+        layout.addLayout(left_layout)
+        layout.addLayout(right_layout)
+
+        self.view_tab.setLayout(layout)
+
+        self.load_all_recipes()
+
+    def load_all_recipes(self):
+        self.recipes = load_recipes()
+        self.recipe_list.clear()
+        for recipe in self.recipes:
+            self.recipe_list.addItem(recipe['title'])
+
+    def load_selected_recipe(self, item):
+        title = item.text()
+        for recipe in self.recipes:
+            if recipe['title'] == title:
+                text = f"🍽️ {recipe['title']}\n\n"
+                text += "Ingredients:\n" + "\n".join(f"- {i}" for i in recipe['ingredients']) + "\n\n"
+                text += "Instructions:\n" + "\n".join(f"{i+1}. {step}" for i, step in enumerate(recipe['instructions'])) + "\n\n"
+                nutrition = recipe.get("nutrition", {})
+                text += "Nutrition:\n" + "\n".join(f"{k}: {v}" for k, v in nutrition.items())
+                self.recipe_view.setText(text)
+
+                # Show image
+                if 'image_path' in recipe:
+                    pixmap = QPixmap(recipe['image_path'])
+                    self.image_label.setPixmap(pixmap)
+                else:
+                    self.image_label.setPixmap(QPixmap())
+                break
+
+    # ---------- COLLECT TAB ----------
+    def init_collect_tab(self):
+        layout = QVBoxLayout()
+
+        form = QFormLayout()
+        self.search_input = QLineEdit()
+        self.num_input = QSpinBox()
+        self.num_input.setRange(1, 50)
+        self.num_input.setValue(5)
+
+        self.exclude_input = QLineEdit()
+        self.protein_min = QSpinBox(); self.protein_min.setRange(0, 100)
+        self.fat_max = QSpinBox(); self.fat_max.setRange(0, 100)
+        self.carbs_max = QSpinBox(); self.carbs_max.setRange(0, 100)
+
+        form.addRow("Search Term:", self.search_input)
+        form.addRow("Number of Recipes:", self.num_input)
+        form.addRow("Exclude Ingredients (comma):", self.exclude_input)
+        form.addRow("Min Protein (g):", self.protein_min)
+        form.addRow("Max Fat (g):", self.fat_max)
+        form.addRow("Max Carbs (g):", self.carbs_max)
+
+        self.collect_btn = QPushButton("Collect Recipes")
+        self.collect_btn.clicked.connect(self.run_collection)
+
+        layout.addLayout(form)
+        layout.addWidget(self.collect_btn)
+        self.collect_tab.setLayout(layout)
+
+    def run_collection(self):
+        search = self.search_input.text()
+        num = self.num_input.value()
+        excludes = [x.strip().lower() for x in self.exclude_input.text().split(",") if x.strip()]
+        filters = {
+            "proteinContent": lambda x: x >= self.protein_min.value(),
+            "fatContent": lambda x: x <= self.fat_max.value(),
+            "carbohydrateContent": lambda x: x <= self.carbs_max.value(),
+        }
+
+        collected = collect_recipes(search, num, excludes, filters)
+        QMessageBox.information(self, "Done", f"Collected {len(collected)} recipes.")
+        self.load_all_recipes()
+
+if __name__ == "__main__":
+    app = QApplication(sys.argv)
+    window = RecipeApp()
+    window.show()
+    sys.exit(app.exec_())
