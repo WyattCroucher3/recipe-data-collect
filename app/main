@@ -1,20 +1,23 @@
 # main.py
+# run with bash - python main.py
 
 import sys
+import json
 from PyQt5.QtWidgets import (
     QApplication, QWidget, QTabWidget, QVBoxLayout,
-    QHBoxLayout, QPushButton, QLabel, QListWidget, QTextEdit, QLineEdit,
-    QFileDialog, QFormLayout, QMessageBox, QSpinBox, QCheckBox
+    QHBoxLayout, QPushButton, QLabel, QListWidget, QLineEdit,
+    QFormLayout, QMessageBox, QSpinBox, QPlainTextEdit
 )
 from PyQt5.QtGui import QPixmap
-from recipe_collector import collect_recipes
-from recipe_manager import load_recipes, save_recipe
+from recipe_collector import collect_recipes # type: ignore
+from recipe_manager import load_recipes, save_recipe_to_file, export_all_to_csv # type: ignore
+
 
 class RecipeApp(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Recipe Collector & Viewer")
-        self.setMinimumSize(800, 600)
+        self.setMinimumSize(900, 600)
 
         layout = QVBoxLayout()
         self.tabs = QTabWidget()
@@ -31,30 +34,45 @@ class RecipeApp(QWidget):
         layout.addWidget(self.tabs)
         self.setLayout(layout)
 
-    # ---------- VIEW TAB ----------
     def init_view_tab(self):
         layout = QHBoxLayout()
 
         self.recipe_list = QListWidget()
         self.recipe_list.itemClicked.connect(self.load_selected_recipe)
 
-        self.recipe_view = QTextEdit()
-        self.recipe_view.setReadOnly(True)
-
         self.image_label = QLabel("Image Preview")
-        self.image_label.setFixedWidth(300)
+        self.image_label.setFixedWidth(250)
         self.image_label.setScaledContents(True)
+
+        # Editable fields
+        self.edit_title = QLineEdit()
+        self.edit_ingredients = QPlainTextEdit()
+        self.edit_instructions = QPlainTextEdit()
+        self.edit_nutrition = QPlainTextEdit()
+        self.save_edit_btn = QPushButton("💾 Save Changes")
+        self.save_edit_btn.clicked.connect(self.save_edited_recipe)
+
+        self.export_csv_btn = QPushButton("📄 Export All to CSV")
+        self.export_csv_btn.clicked.connect(self.export_csv)
 
         left_layout = QVBoxLayout()
         left_layout.addWidget(QLabel("Saved Recipes"))
         left_layout.addWidget(self.recipe_list)
+        left_layout.addWidget(self.export_csv_btn)
+
+        form_layout = QFormLayout()
+        form_layout.addRow("Title:", self.edit_title)
+        form_layout.addRow("Ingredients:", self.edit_ingredients)
+        form_layout.addRow("Instructions:", self.edit_instructions)
+        form_layout.addRow("Nutrition (JSON):", self.edit_nutrition)
+        form_layout.addWidget(self.save_edit_btn)
 
         right_layout = QVBoxLayout()
-        right_layout.addWidget(self.recipe_view)
         right_layout.addWidget(self.image_label)
+        right_layout.addLayout(form_layout)
 
-        layout.addLayout(left_layout)
-        layout.addLayout(right_layout)
+        layout.addLayout(left_layout, 3)
+        layout.addLayout(right_layout, 5)
 
         self.view_tab.setLayout(layout)
 
@@ -70,14 +88,13 @@ class RecipeApp(QWidget):
         title = item.text()
         for recipe in self.recipes:
             if recipe['title'] == title:
-                text = f"🍽️ {recipe['title']}\n\n"
-                text += "Ingredients:\n" + "\n".join(f"- {i}" for i in recipe['ingredients']) + "\n\n"
-                text += "Instructions:\n" + "\n".join(f"{i+1}. {step}" for i, step in enumerate(recipe['instructions'])) + "\n\n"
+                self.selected_recipe = recipe
+                self.edit_title.setText(recipe['title'])
+                self.edit_ingredients.setPlainText("\n".join(recipe['ingredients']))
+                self.edit_instructions.setPlainText("\n".join(recipe['instructions']))
                 nutrition = recipe.get("nutrition", {})
-                text += "Nutrition:\n" + "\n".join(f"{k}: {v}" for k, v in nutrition.items())
-                self.recipe_view.setText(text)
+                self.edit_nutrition.setPlainText(json.dumps(nutrition, indent=2))
 
-                # Show image
                 if 'image_path' in recipe:
                     pixmap = QPixmap(recipe['image_path'])
                     self.image_label.setPixmap(pixmap)
@@ -85,7 +102,30 @@ class RecipeApp(QWidget):
                     self.image_label.setPixmap(QPixmap())
                 break
 
-    # ---------- COLLECT TAB ----------
+    def save_edited_recipe(self):
+        if not hasattr(self, 'selected_recipe'):
+            return
+
+        self.selected_recipe['title'] = self.edit_title.text()
+        self.selected_recipe['ingredients'] = self.edit_ingredients.toPlainText().splitlines()
+        self.selected_recipe['instructions'] = self.edit_instructions.toPlainText().splitlines()
+
+        try:
+            nutrition_data = json.loads(self.edit_nutrition.toPlainText())
+            self.selected_recipe['nutrition'] = nutrition_data
+        except Exception as e:
+            QMessageBox.warning(self, "Error", f"Invalid nutrition JSON: {e}")
+            return
+
+        save_recipe_to_file(self.selected_recipe)
+
+        QMessageBox.information(self, "Saved", "Recipe updated.")
+        self.load_all_recipes()
+
+    def export_csv(self):
+        export_all_to_csv(self.recipes)
+        QMessageBox.information(self, "Exported", "CSV updated.")
+
     def init_collect_tab(self):
         layout = QVBoxLayout()
 
@@ -96,9 +136,12 @@ class RecipeApp(QWidget):
         self.num_input.setValue(5)
 
         self.exclude_input = QLineEdit()
-        self.protein_min = QSpinBox(); self.protein_min.setRange(0, 100)
-        self.fat_max = QSpinBox(); self.fat_max.setRange(0, 100)
-        self.carbs_max = QSpinBox(); self.carbs_max.setRange(0, 100)
+        self.protein_min = QSpinBox()
+        self.protein_min.setRange(0, 100)
+        self.fat_max = QSpinBox()
+        self.fat_max.setRange(0, 100)
+        self.carbs_max = QSpinBox()
+        self.carbs_max.setRange(0, 100)
 
         form.addRow("Search Term:", self.search_input)
         form.addRow("Number of Recipes:", self.num_input)
@@ -127,6 +170,7 @@ class RecipeApp(QWidget):
         collected = collect_recipes(search, num, excludes, filters)
         QMessageBox.information(self, "Done", f"Collected {len(collected)} recipes.")
         self.load_all_recipes()
+
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
